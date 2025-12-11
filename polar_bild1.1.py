@@ -12,7 +12,10 @@ st.title("📊 Polarized Collagen Batch‑Quantifier (Manual Threshold + Hue-Fil
 # Sidebar Settings
 # -------------------------
 st.sidebar.header("Brightness‑Threshold (manuell)")
-manual_thresh = st.sidebar.slider("Threshold auf Brightness", 0, 255, 120)
+# Auto-Otsu wird später im Analyse-Schritt berechnet
+otsu_placeholder = st.sidebar.empty()
+offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
+manual_thresh = None  # Wird später gesetzt("Threshold auf Brightness", 0, 255, 120)
 
 st.sidebar.header("Hue‑Filter Einstellungen")
 hue_thick_low = st.sidebar.slider("Dicke Fasern: Hue LOW", 0, 30, 25)
@@ -35,7 +38,17 @@ def analyze_image(file_bytes, fname):
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     brightness = hsv[:,:,2]
 
-    # Manuelle Threshold-Maske
+        # Auto-Otsu
+    otsu_val, _ = cv2.threshold(brightness, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Sidebar Otsu-Anzeige aktualisieren
+    otsu_placeholder.markdown(f"**Auto-Otsu vorgeschlagen: {int(otsu_val)}**")
+
+    # Manuell = Auto-Otsu + Offset
+    manual_val = int(np.clip(otsu_val + offset, 0, 255))
+
+    # Threshold anwenden
+    _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
     _, mask = cv2.threshold(brightness, manual_thresh, 255, cv2.THRESH_BINARY)
 
     # Reinigende Morphologie
