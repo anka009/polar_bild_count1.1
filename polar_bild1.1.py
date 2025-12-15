@@ -12,19 +12,28 @@ st.title("📊 Polarized Collagen Batch‑Quantifier (Rot/Grün‑Filter)")
 # Sidebar Settings
 # -------------------------
 st.sidebar.header("Threshold-Einstellungen")
-mode = st.sidebar.radio("Threshold-Modus", ["Auto+Offset", "Manuell"])
+mode = st.sidebar.radio(
+    "Threshold-Modus",
+    ["Auto+Offset", "Manuell"],
+    key="threshold_mode"   # eindeutiger Schlüssel verhindert DuplicateElementId
+)
 
 otsu_placeholder = st.sidebar.empty()
-offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
-manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120)
+offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0, key="offset_slider")
+manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120, key="manual_slider")
 
 st.sidebar.header("Hue‑Filter Einstellungen")
-hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25)
-hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160)
-hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40)
-hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90)
+hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25, key="red_low")
+hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160, key="red_high")
+hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40, key="green_low")
+hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90, key="green_high")
 
-uploaded = st.sidebar.file_uploader("Bilder hochladen (TIFF/JPG/PNG)", accept_multiple_files=True)
+uploaded = st.sidebar.file_uploader(
+    "Bilder hochladen (TIFF/JPG/PNG)",
+    accept_multiple_files=True,
+    key="file_uploader"
+)
+
 results = []
 
 # -------------------------
