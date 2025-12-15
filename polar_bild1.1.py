@@ -6,25 +6,34 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Polarized Collagen Quantification", layout="wide")
-st.title("📊 Polarized Collagen Batch‑Quantifier (Rot/Grün‑Filter)")
+st.title("📊 Polarized Collagen Batch‑Quantifier (Rot/Grün/Mischfasern)")
 
 # -------------------------
 # Sidebar Settings
 # -------------------------
 st.sidebar.header("Threshold-Einstellungen")
-mode = st.sidebar.radio("Threshold-Modus", ["Auto+Offset", "Manuell"])
+mode = st.sidebar.radio(
+    "Threshold-Modus",
+    ["Auto+Offset", "Manuell"],
+    key="threshold_mode"
+)
 
 otsu_placeholder = st.sidebar.empty()
-offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
-manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120)
+offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0, key="offset_slider")
+manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120, key="manual_slider")
 
 st.sidebar.header("Hue‑Filter Einstellungen")
-hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25)
-hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160)
-hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40)
-hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90)
+hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25, key="red_low")
+hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160, key="red_high")
+hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40, key="green_low")
+hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90, key="green_high")
 
-uploaded = st.sidebar.file_uploader("Bilder hochladen (TIFF/JPG/PNG)", accept_multiple_files=True)
+uploaded = st.sidebar.file_uploader(
+    "Bilder hochladen (TIFF/JPG/PNG)",
+    accept_multiple_files=True,
+    key="file_uploader"
+)
+
 results = []
 
 # -------------------------
@@ -64,24 +73,35 @@ def analyze_image(file_bytes, fname,
     red_mask   = np.logical_and((h < hue_red_low) | (h > hue_red_high), mask_clean > 0)
     green_mask = np.logical_and((h > hue_green_low) & (h < hue_green_high), mask_clean > 0)
 
-    collagen_area = int(np.sum(mask_clean > 0))
-    total_area = mask_clean.size
-    frac = collagen_area / total_area * 100
-    mean_intensity = float(np.mean(brightness[mask_clean > 0]))
-    ratio = float((np.sum(red_mask) + 1e-6) / (np.sum(green_mask) + 1e-6))
+    # Mischfasern = Überschneidung
+    mixed_mask = np.logical_and(red_mask, green_mask)
 
+    # Exklusive Masken
+    red_mask_exclusive   = np.logical_and(red_mask, ~mixed_mask)
+    green_mask_exclusive = np.logical_and(green_mask, ~mixed_mask)
+
+    # Zählungen
+    red_pixels   = int(np.sum(red_mask_exclusive))
+    green_pixels = int(np.sum(green_mask_exclusive))
+    mixed_pixels = int(np.sum(mixed_mask))
+
+    ratio_red_green = float((red_pixels + 1e-6) / (green_pixels + 1e-6))
+
+    # Overlay mit drei Farben
     overlay = img_rgb.copy()
-    overlay[red_mask]   = [255, 0, 0]   # Rot
-    overlay[green_mask] = [0, 255, 0]   # Grün
+    overlay[red_mask_exclusive]   = [255, 0, 0]     # Rot
+    overlay[green_mask_exclusive] = [0, 255, 0]     # Grün
+    overlay[mixed_mask]           = [255, 255, 0]   # Gelb für Mischfasern
 
     return {
         "image": fname,
-        "collagen_pixels": collagen_area,
-        "area_percent": frac,
-        "mean_intensity": mean_intensity,
-        "red_pixels": int(np.sum(red_mask)),
-        "green_pixels": int(np.sum(green_mask)),
-        "ratio_red_green": ratio,
+        "collagen_pixels": int(np.sum(mask_clean > 0)),
+        "area_percent": (np.sum(mask_clean > 0) / mask_clean.size) * 100,
+        "mean_intensity": float(np.mean(brightness[mask_clean > 0])),
+        "red_pixels": red_pixels,
+        "green_pixels": green_pixels,
+        "mixed_pixels": mixed_pixels,
+        "ratio_red_green": ratio_red_green,
         "mask_clean": mask_clean,
         "overlay": overlay
     }
@@ -103,7 +123,7 @@ if uploaded:
     # Ergebnisse-Tabelle
     df = pd.DataFrame(results)[[
         "image","collagen_pixels","area_percent",
-        "mean_intensity","red_pixels","green_pixels","ratio_red_green"
+        "mean_intensity","red_pixels","green_pixels","mixed_pixels","ratio_red_green"
     ]]
     st.subheader("📄 Ergebnisse")
     st.dataframe(df)
@@ -118,6 +138,6 @@ if uploaded:
     for r in results:
         st.markdown(f"### {r['image']}")
         st.image(r['mask_clean'], caption="Kollagen-Maske")
-        st.image(r['overlay'], caption="Overlay: Rot • Grün")
+        st.image(r['overlay'], caption="Overlay: Rot • Grün • Gelb (Mischfasern)")
 else:
     st.info("Bitte Bilder hochladen, um die Analyse zu starten.")
