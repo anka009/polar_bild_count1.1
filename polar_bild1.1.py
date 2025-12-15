@@ -19,10 +19,10 @@ offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
 manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120)
 
 st.sidebar.header("Hue‑Filter Einstellungen")
-hue_thick_low = st.sidebar.slider("Dicke Fasern: Hue LOW", 0, 30, 25)
-hue_thick_high = st.sidebar.slider("Dicke Fasern: Hue HIGH", 150, 180, 160)
-hue_thin_low = st.sidebar.slider("Dünne Fasern: Hue LOW", 30, 90, 40)
-hue_thin_high = st.sidebar.slider("Dünne Fasern: Hue HIGH", 60, 120, 90)
+hue_thick_low = st.sidebar.slider("Rote Fasern: Hue LOW", 0, 30, 25)
+hue_thick_high = st.sidebar.slider("Rote Fasern: Hue HIGH", 150, 180, 160)
+hue_thin_low = st.sidebar.slider("Grüne Fasern: Hue LOW", 30, 90, 40)
+hue_thin_high = st.sidebar.slider("Grüne Fasern: Hue HIGH", 60, 120, 90)
 
 uploaded = st.sidebar.file_uploader("Bilder hochladen (TIFF/JPG/PNG)", accept_multiple_files=True)
 results = []
@@ -97,26 +97,29 @@ if uploaded:
         results.append(analyze_image(
             f, f.name,
             mode, offset, manual_thresh,
-            hue_thick_low, hue_thick_high,
-            hue_thin_low, hue_thin_high,
+            hue_red_low, hue_red_high,
+            hue_green_low, hue_green_high,
             otsu_placeholder
         ))
 
+    # Ergebnisse-Tabelle
     df = pd.DataFrame(results)[[
         "image","collagen_pixels","area_percent",
-        "mean_intensity","thick_pixels","thin_pixels","ratio_thick_thin"
+        "mean_intensity","red_pixels","green_pixels","ratio_red_green"
     ]]
     st.subheader("📄 Ergebnisse")
     st.dataframe(df)
 
+    # CSV-Download
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 CSV herunterladen", csv,
                        "collagen_results.csv", "text/csv")
 
+    # Debug-Ansicht
     st.subheader("🔍 Debug‑Ansicht pro Bild")
     for r in results:
         st.markdown(f"### {r['image']}")
         st.image(r['mask_clean'], caption="Kollagen-Maske")
-        st.image(r['overlay'], caption="Overlay: Rot = dick • Grün = dünn")
+        st.image(r['overlay'], caption="Overlay: Rot = Klasse 1 • Grün = Klasse 2")
 else:
     st.info("Bitte Bilder hochladen, um die Analyse zu starten.")
