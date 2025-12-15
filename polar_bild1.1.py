@@ -15,7 +15,12 @@ st.sidebar.header("Brightness‑Threshold (manuell)")
 # Auto-Otsu wird später im Analyse-Schritt berechnet
 otsu_placeholder = st.sidebar.empty()
 offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
-manual_thresh = None  # Wird später gesetzt("Threshold auf Brightness", 0, 255, 120)
+
+manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120)
+if manual_thresh is not None:
+    _, mask = cv2.threshold(brightness, manual_thresh, 255, cv2.THRESH_BINARY)
+else:
+    _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
 
 st.sidebar.header("Hue‑Filter Einstellungen")
 hue_thick_low = st.sidebar.slider("Dicke Fasern: Hue LOW", 0, 30, 25)
@@ -49,7 +54,6 @@ def analyze_image(file_bytes, fname):
 
     # Threshold anwenden
     _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
-    _, mask = cv2.threshold(brightness, manual_thresh, 255, cv2.THRESH_BINARY)
 
     # Reinigende Morphologie
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4,4))
