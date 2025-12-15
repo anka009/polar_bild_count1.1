@@ -15,30 +15,33 @@ st.sidebar.header("Threshold-Einstellungen")
 mode = st.sidebar.radio(
     "Threshold-Modus",
     ["Auto+Offset", "Manuell"],
-    key="threshold_mode"
+    key="threshold_mode_radio"   # eindeutiger Schlüssel
 )
 
 otsu_placeholder = st.sidebar.empty()
 offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0, key="offset_slider")
-manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120, key="manual_slider")
+manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120, key="manual_thresh_slider")
 
-# Hue-Regler für alle Kategorien
+# Hue-Regler für Kollagen I (Rot)
 st.sidebar.header("Hue‑Filter Kollagen I (Rot)")
-hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25, key="red_low")
-hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160, key="red_high")
+hue_red_low   = st.sidebar.slider("Rot: Hue LOW", 0, 30, 25, key="hue_red_low_slider")
+hue_red_high  = st.sidebar.slider("Rot: Hue HIGH", 150, 180, 160, key="hue_red_high_slider")
 
+# Hue-Regler für Kollagen III (Grün)
 st.sidebar.header("Hue‑Filter Kollagen III (Grün)")
-hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40, key="green_low")
-hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90, key="green_high")
+hue_green_low = st.sidebar.slider("Grün: Hue LOW", 30, 90, 40, key="hue_green_low_slider")
+hue_green_high= st.sidebar.slider("Grün: Hue HIGH", 60, 120, 90, key="hue_green_high_slider")
 
+# Hue-Regler für Mischfasern (I+III)
 st.sidebar.header("Hue‑Filter Kollagen I+III (Mischfasern)")
-hue_mix_low   = st.sidebar.slider("Misch: Hue LOW", 0, 180, 20, key="mix_low")
-hue_mix_high  = st.sidebar.slider("Misch: Hue HIGH", 0, 180, 160, key="mix_high")
+hue_mix_low   = st.sidebar.slider("Misch: Hue LOW", 0, 180, 20, key="hue_mix_low_slider")
+hue_mix_high  = st.sidebar.slider("Misch: Hue HIGH", 0, 180, 160, key="hue_mix_high_slider")
 
+# File Upload
 uploaded = st.sidebar.file_uploader(
     "Bilder hochladen (TIFF/JPG/PNG)",
     accept_multiple_files=True,
-    key="file_uploader"
+    key="file_uploader_widget"
 )
 
 results = []
