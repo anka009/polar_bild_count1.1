@@ -12,15 +12,10 @@ st.title("📊 Polarized Collagen Batch‑Quantifier (Manual Threshold + Hue-Fil
 # Sidebar Settings
 # -------------------------
 st.sidebar.header("Brightness‑Threshold (manuell)")
-# Auto-Otsu wird später im Analyse-Schritt berechnet
 otsu_placeholder = st.sidebar.empty()
-offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
 
+offset = st.sidebar.slider("Feinjustierung (Offset ±)", -50, 50, 0)
 manual_thresh = st.sidebar.slider("Manueller Threshold", 0, 255, 120)
-if manual_thresh is not None:
-    _, mask = cv2.threshold(brightness, manual_thresh, 255, cv2.THRESH_BINARY)
-else:
-    _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
 
 st.sidebar.header("Hue‑Filter Einstellungen")
 hue_thick_low = st.sidebar.slider("Dicke Fasern: Hue LOW", 0, 30, 25)
@@ -35,7 +30,11 @@ results = []
 # -------------------------
 # Analyse-Funktion
 # -------------------------
-def analyze_image(file_bytes, fname):
+def analyze_image(file_bytes, fname,
+                  offset, manual_thresh,
+                  hue_thick_low, hue_thick_high,
+                  hue_thin_low, hue_thin_high,
+                  otsu_placeholder):
     data = np.asarray(bytearray(file_bytes.read()), dtype=np.uint8)
     img = cv2.imdecode(data, cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -43,8 +42,9 @@ def analyze_image(file_bytes, fname):
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     brightness = hsv[:,:,2]
 
-        # Auto-Otsu
-    otsu_val, _ = cv2.threshold(brightness, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Auto-Otsu
+    otsu_val, _ = cv2.threshold(brightness, 0, 255,
+                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # Sidebar Otsu-Anzeige aktualisieren
     otsu_placeholder.markdown(f"**Auto-Otsu vorgeschlagen: {int(otsu_val)}**")
@@ -52,8 +52,11 @@ def analyze_image(file_bytes, fname):
     # Manuell = Auto-Otsu + Offset
     manual_val = int(np.clip(otsu_val + offset, 0, 255))
 
-    # Threshold anwenden
-    _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
+    # Threshold anwenden: entweder Slider oder Otsu+Offset
+    if manual_thresh:
+        _, mask = cv2.threshold(brightness, manual_thresh, 255, cv2.THRESH_BINARY)
+    else:
+        _, mask = cv2.threshold(brightness, manual_val, 255, cv2.THRESH_BINARY)
 
     # Reinigende Morphologie
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (4,4))
@@ -61,7 +64,6 @@ def analyze_image(file_bytes, fname):
 
     # Hue basierte Faserklassifizierung
     h = hsv[:,:,0]
-
     thick = ((h < hue_thick_low) | (h > hue_thick_high))
     thin  = ((h > hue_thin_low) & (h < hue_thin_high))
 
@@ -73,13 +75,12 @@ def analyze_image(file_bytes, fname):
     frac = collagen_area / total_area * 100
 
     mean_intensity = float(np.mean(brightness[mask_clean > 0]))
-
     ratio = float((np.sum(thick_mask) + 1e-6) / (np.sum(thin_mask) + 1e-6))
 
-    # Prepare images for debugging output
+    # Debug-Overlay
     overlay = img_rgb.copy()
     overlay[thick_mask] = [255, 0, 0]
-    overlay[thin_mask] = [0, 255, 0]
+    overlay[thin_mask]  = [0, 255, 0]
 
     return {
         "image": fname,
@@ -99,19 +100,32 @@ def analyze_image(file_bytes, fname):
 if uploaded:
     for f in uploaded:
         f.seek(0)
-        results.append(analyze_image(f, f.name))
+        results.append(analyze_image(
+            f, f.name,
+            offset, manual_thresh,
+            hue_thick_low, hue_thick_high,
+            hue_thin_low, hue_thin_high,
+            otsu_placeholder
+        ))
 
-    df = pd.DataFrame(results)[["image","collagen_pixels","area_percent","mean_intensity","thick_pixels","thin_pixels","ratio_thick_thin"]]
+    # Ergebnisse-Tabelle
+    df = pd.DataFrame(results)[[
+        "image","collagen_pixels","area_percent",
+        "mean_intensity","thick_pixels","thin_pixels","ratio_thick_thin"
+    ]]
     st.subheader("📄 Ergebnisse")
     st.dataframe(df)
 
+    # CSV-Download
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("📥 CSV herunterladen", csv, "collagen_results.csv", "text/csv")
+    st.download_button("📥 CSV herunterladen", csv,
+                       "collagen_results.csv", "text/csv")
 
+    # Debug-Ansicht
     st.subheader("🔍 Debug‑Ansicht pro Bild")
     for r in results:
         st.markdown(f"### {r['image']}")
-        st.image(r['mask_clean'], caption="Kollagen-Maske (manueller Threshold)")
+        st.image(r['mask_clean'], caption="Kollagen-Maske (Threshold)")
         st.image(r['overlay'], caption="Overlay: Rot = dick • Grün = dünn")
 else:
     st.info("Bitte Bilder hochladen, um die Analyse zu starten.")
