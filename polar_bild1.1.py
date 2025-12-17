@@ -4,13 +4,13 @@ import numpy as np
 import pandas as pd
 from skimage.measure import label, regionprops
 
-st.set_page_config(page_title="PSR Collagen Quantification (Feine Fasern + Längenfilter)", layout="wide")
-st.title("📊 PSR Polarized Collagen Quantifier (I / III / I+III)")
+st.set_page_config(page_title="PSR Collagen Quantification – Paper-ready", layout="wide")
+st.title("📊 PSR Polarized Collagen Quantifier (Feine Fasern + Längenfilter)")
 
 # -------------------------
 # Sidebar
 # -------------------------
-st.sidebar.header("Threshold")
+st.sidebar.header("Threshold-Modus")
 mode = st.sidebar.radio("Modus", ["Auto+Offset", "Manuell"])
 offset = st.sidebar.slider("Otsu Offset", -40, 40, -10)
 manual_thresh = st.sidebar.slider("Manueller Threshold (V)", 0, 255, 110)
@@ -44,27 +44,29 @@ def analyze_image(file):
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
-
-    # -------------------------
-    # Adaptive Threshold
-    # -------------------------
     v_uint8 = v.astype(np.uint8)
+
+    # -------------------------
+    # Thresholding
+    # -------------------------
+    if mode == "Manuell":
+        mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
+    else:
+        otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        thresh_val = np.clip(otsu_val + offset, 0, 255)
+        mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
+
+    # Adaptive Threshold für feine Fasern
     adaptive_thresh = cv2.adaptiveThreshold(
-        v_uint8, 255,
-        cv2.ADAPTIVE_THRESH_MEAN_C,
-        cv2.THRESH_BINARY,
-        15, -5
+        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
     )
+    combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
 
-    otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thresh_val = manual_thresh if mode == "Manuell" else np.clip(otsu_val + offset, 0, 255)
-    otsu_mask = (v_uint8 > thresh_val).astype(np.uint8) * 255
-
-    combined_mask = cv2.bitwise_or(otsu_mask, adaptive_thresh)
+    # Sättigungsfilter
     sat_mask = (s > sat_min).astype(np.uint8) * 255
     collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
 
-    # Morphologie
+    # Morphologische Reinigung
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_OPEN, kernel)
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_CLOSE, kernel)
@@ -74,11 +76,9 @@ def analyze_image(file):
     # -------------------------
     labels = label(collagen_mask)
     filtered_mask = np.zeros_like(collagen_mask)
-
     for region in regionprops(labels):
         if region.major_axis_length >= min_length and region.area >= min_area:
             filtered_mask[labels == region.label] = 255
-
     collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
 
@@ -90,13 +90,17 @@ def analyze_image(file):
     green_mask = ((h >= green_low) & (h <= green_high)) & cm
 
     # -------------------------
-    # Quantifizierung
+    # Quantifizierung Rot/Grün Relation
+    # Orange wird als Remis betrachtet
     # -------------------------
-    total = np.sum(cm)
-    red = np.sum(red_mask)
-    orange = np.sum(orange_mask)
-    green = np.sum(green_mask)
-    def pct(x): return 100 * x / (total + 1e-6)
+    red_px = np.sum(red_mask)
+    green_px = np.sum(green_mask)
+    total_classified = red_px + green_px
+    red_rel = 100 * red_px / (total_classified + 1e-6)
+    green_rel = 100 * green_px / (total_classified + 1e-6)
+
+    # Gesamtmaske (inklusive Mischfasern)
+    total_area = np.sum(cm)
 
     # -------------------------
     # Overlay
@@ -108,10 +112,9 @@ def analyze_image(file):
 
     return {
         "Image": file.name,
-        "Total Collagen Area (px)": total,
-        "Collagen I (red) %": pct(red),
-        "Collagen I+III (orange) %": pct(orange),
-        "Collagen III (green) %": pct(green),
+        "Total Collagen Area (px)": total_area,
+        "Collagen I (red %)": red_rel,
+        "Collagen III (green %)": green_rel,
         "overlay": overlay,
         "mask": collagen_mask
     }
@@ -127,7 +130,7 @@ if uploaded:
         results.append(analyze_image(f))
 
     df = pd.DataFrame(results).drop(columns=["overlay", "mask"])
-    st.subheader("📄 Ergebnisse")
+    st.subheader("📄 Ergebnisse (Rot/Grün Relation)")
     st.dataframe(df)
 
     st.download_button(
@@ -142,7 +145,7 @@ if uploaded:
         st.image(r["mask"], caption="Gesamt-Kollagen-Maske inkl. feiner Fasern")
         st.image(
             r["overlay"],
-            caption="Overlay: Rot (I) · Orange (I+III) · Grün (III)"
+            caption="Overlay: Rot (I) · Orange (I+III, Remis) · Grün (III)"
         )
 else:
     st.info("Bitte PSR-Bilder hochladen.")
