@@ -3,18 +3,19 @@ import cv2
 import numpy as np
 import pandas as pd
 
-st.set_page_config(page_title="PSR Collagen Quantification", layout="wide")
-st.title("📊 PSR Polarized Collagen Quantifier (I / III / I+III)")
+st.set_page_config(page_title="PSR Collagen Quantification (Feine Fasern)", layout="wide")
+st.title("📊 PSR Polarized Collagen Quantifier (I / III / I+III) – Feine Fasern")
 
-# =====================================================
+# -------------------------
 # Sidebar
-# =====================================================
+# -------------------------
 st.sidebar.header("Threshold")
 mode = st.sidebar.radio("Modus", ["Auto+Offset", "Manuell"])
 offset = st.sidebar.slider("Otsu Offset", -40, 40, -10)
 manual_thresh = st.sidebar.slider("Manueller Threshold (V)", 0, 255, 110)
 
-sat_min = st.sidebar.slider("Min. Saturation", 0, 255, 30)
+st.sidebar.header("Sättigungsfilter (gegen False Positives)")
+sat_min = st.sidebar.slider("Min. Saturation (S)", 0, 20, 5)  # niedriger Wert für feine Fasern
 
 st.sidebar.header("Hue-Bereiche (OpenCV HSV)")
 red_max = st.sidebar.slider("Rot max", 5, 15, 10)
@@ -29,50 +30,58 @@ uploaded = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 
-# =====================================================
-# Analyse
-# =====================================================
+# -------------------------
+# Analyse-Funktion
+# -------------------------
 def analyze_image(file):
-
     data = np.asarray(bytearray(file.read()), dtype=np.uint8)
     img = cv2.imdecode(data, cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
-
-    h, s, v = hsv[:,:,0], hsv[:,:,1], hsv[:,:,2]
+    h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
     # -------------------------
-    # Kollagen-Gesamtmaske
+    # Adaptive Threshold für feine Fasern
     # -------------------------
-    otsu, _ = cv2.threshold(v, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thresh = manual_thresh if mode == "Manuell" else np.clip(otsu + offset, 0, 255)
+    v_uint8 = v.astype(np.uint8)
+    adaptive_thresh = cv2.adaptiveThreshold(
+        v_uint8, 255,
+        cv2.ADAPTIVE_THRESH_MEAN_C,
+        cv2.THRESH_BINARY,
+        15, -5  # Blocksize=15, C=−5 (kann angepasst werden)
+    )
 
-    collagen_mask = ((v > thresh) & (s > sat_min)).astype(np.uint8) * 255
+    # Auto-Otsu falls gewünscht
+    otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    thresh_val = manual_thresh if mode == "Manuell" else np.clip(otsu_val + offset, 0, 255)
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
+    # Kombiniere Otsu/Manual + Adaptive
+    otsu_mask = (v_uint8 > thresh_val).astype(np.uint8) * 255
+    combined_mask = cv2.bitwise_or(otsu_mask, adaptive_thresh)
+
+    # -------------------------
+    # Sättigungsfilter
+    # -------------------------
+    sat_mask = (s > sat_min).astype(np.uint8) * 255
+    collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
+
+    # -------------------------
+    # Morphologische Reinigung (klein für feine Fasern)
+    # -------------------------
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_OPEN, kernel)
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_CLOSE, kernel)
-
     cm = collagen_mask.astype(bool)
 
     # -------------------------
-    # Hue-Klassifikation (REAL PSR)
+    # Hue-Klassifikation (Rot / Orange / Grün)
     # -------------------------
-    red_mask = (
-        ((h >= 0) & (h <= red_max)) |
-        ((h >= 170) & (h <= 179))
-    ) & cm
-
-    orange_mask = (
-        (h >= orange_low) & (h <= orange_high)
-    ) & cm
-
-    green_mask = (
-        (h >= green_low) & (h <= green_high)
-    ) & cm
+    red_mask = (((h >= 0) & (h <= red_max)) | ((h >= 170) & (h <= 179))) & cm
+    orange_mask = ((h >= orange_low) & (h <= orange_high)) & cm
+    green_mask = ((h >= green_low) & (h <= green_high)) & cm
 
     # -------------------------
-    # Quantifizierung
+    # Quantifizierung (Flächen%)
     # -------------------------
     total = np.sum(cm)
     red = np.sum(red_mask)
@@ -99,9 +108,9 @@ def analyze_image(file):
         "mask": collagen_mask
     }
 
-# =====================================================
+# -------------------------
 # Main
-# =====================================================
+# -------------------------
 results = []
 
 if uploaded:
@@ -122,7 +131,7 @@ if uploaded:
     st.subheader("🔍 Qualitätskontrolle")
     for r in results:
         st.markdown(f"### {r['Image']}")
-        st.image(r["mask"], caption="Gesamt-Kollagen-Maske")
+        st.image(r["mask"], caption="Gesamt-Kollagen-Maske inkl. feiner Fasern")
         st.image(
             r["overlay"],
             caption="Overlay: Rot (I) · Orange (I+III) · Grün (III)"
