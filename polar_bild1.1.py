@@ -2,9 +2,10 @@ import streamlit as st
 import cv2
 import numpy as np
 import pandas as pd
+from skimage.measure import label, regionprops
 
-st.set_page_config(page_title="PSR Collagen Quantification (Feine Fasern)", layout="wide")
-st.title("📊 PSR Polarized Collagen Quantifier (I / III / I+III) – Feine Fasern")
+st.set_page_config(page_title="PSR Collagen Quantification (Feine Fasern + Längenfilter)", layout="wide")
+st.title("📊 PSR Polarized Collagen Quantifier (I / III / I+III)")
 
 # -------------------------
 # Sidebar
@@ -14,8 +15,8 @@ mode = st.sidebar.radio("Modus", ["Auto+Offset", "Manuell"])
 offset = st.sidebar.slider("Otsu Offset", -40, 40, -10)
 manual_thresh = st.sidebar.slider("Manueller Threshold (V)", 0, 255, 110)
 
-st.sidebar.header("Sättigungsfilter (gegen False Positives)")
-sat_min = st.sidebar.slider("Min. Saturation (S)", 0, 20, 5)  # niedriger Wert für feine Fasern
+st.sidebar.header("Sättigungsfilter")
+sat_min = st.sidebar.slider("Min. Saturation (S)", 0, 20, 5)
 
 st.sidebar.header("Hue-Bereiche (OpenCV HSV)")
 red_max = st.sidebar.slider("Rot max", 5, 15, 10)
@@ -23,6 +24,10 @@ orange_low = st.sidebar.slider("Orange low", 8, 20, 12)
 orange_high = st.sidebar.slider("Orange high", 20, 40, 30)
 green_low = st.sidebar.slider("Grün low", 30, 60, 40)
 green_high = st.sidebar.slider("Grün high", 60, 120, 90)
+
+st.sidebar.header("Objektfilter")
+min_length = st.sidebar.slider("Minimale Faserlänge (px)", 1, 100, 10)
+min_area   = st.sidebar.slider("Minimale Fläche (px²)", 1, 20, 5)
 
 uploaded = st.sidebar.file_uploader(
     "PSR Bilder hochladen",
@@ -41,53 +46,56 @@ def analyze_image(file):
     h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
     # -------------------------
-    # Adaptive Threshold für feine Fasern
+    # Adaptive Threshold
     # -------------------------
     v_uint8 = v.astype(np.uint8)
     adaptive_thresh = cv2.adaptiveThreshold(
         v_uint8, 255,
         cv2.ADAPTIVE_THRESH_MEAN_C,
         cv2.THRESH_BINARY,
-        15, -5  # Blocksize=15, C=−5 (kann angepasst werden)
+        15, -5
     )
 
-    # Auto-Otsu falls gewünscht
     otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     thresh_val = manual_thresh if mode == "Manuell" else np.clip(otsu_val + offset, 0, 255)
-
-    # Kombiniere Otsu/Manual + Adaptive
     otsu_mask = (v_uint8 > thresh_val).astype(np.uint8) * 255
-    combined_mask = cv2.bitwise_or(otsu_mask, adaptive_thresh)
 
-    # -------------------------
-    # Sättigungsfilter
-    # -------------------------
+    combined_mask = cv2.bitwise_or(otsu_mask, adaptive_thresh)
     sat_mask = (s > sat_min).astype(np.uint8) * 255
     collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
 
-    # -------------------------
-    # Morphologische Reinigung (klein für feine Fasern)
-    # -------------------------
+    # Morphologie
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_OPEN, kernel)
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_CLOSE, kernel)
+
+    # -------------------------
+    # Filter nach Länge / Fläche
+    # -------------------------
+    labels = label(collagen_mask)
+    filtered_mask = np.zeros_like(collagen_mask)
+
+    for region in regionprops(labels):
+        if region.major_axis_length >= min_length and region.area >= min_area:
+            filtered_mask[labels == region.label] = 255
+
+    collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
 
     # -------------------------
-    # Hue-Klassifikation (Rot / Orange / Grün)
+    # Hue-Klassifikation
     # -------------------------
     red_mask = (((h >= 0) & (h <= red_max)) | ((h >= 170) & (h <= 179))) & cm
     orange_mask = ((h >= orange_low) & (h <= orange_high)) & cm
     green_mask = ((h >= green_low) & (h <= green_high)) & cm
 
     # -------------------------
-    # Quantifizierung (Flächen%)
+    # Quantifizierung
     # -------------------------
     total = np.sum(cm)
     red = np.sum(red_mask)
     orange = np.sum(orange_mask)
     green = np.sum(green_mask)
-
     def pct(x): return 100 * x / (total + 1e-6)
 
     # -------------------------
