@@ -26,7 +26,6 @@ green_low = st.sidebar.slider("Grün low", 30, 60, 40)
 green_high = st.sidebar.slider("Grün high", 60, 120, 90)
 
 st.sidebar.header("Objektfilter")
-apply_cutoff = st.sidebar.checkbox("Längen-Cutoff aktivieren", value=True)
 min_length = st.sidebar.slider("Minimale Faserlänge (px)", 1, 100, 10)
 min_area   = st.sidebar.slider("Minimale Fläche (px²)", 1, 20, 5)
 
@@ -46,37 +45,24 @@ def analyze_image(file):
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     v_uint8 = v.astype(np.uint8)
+
     # -------------------------
     # Thresholding
     # -------------------------
-    bright_fg = st.sidebar.checkbox("Kollagen heller als Hintergrund (V)", value=True)
-    use_adaptive = st.sidebar.checkbox("Adaptive Threshold kombinieren", value=True)
-
     if mode == "Manuell":
         mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
     else:
         otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         thresh_val = np.clip(otsu_val + offset, 0, 255)
+        mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
 
-        if bright_fg:
-            mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
-        else:
-            mask_thresh = (v_uint8 < thresh_val).astype(np.uint8) * 255
+    # Adaptive Threshold für feine Fasern
+    adaptive_thresh = cv2.adaptiveThreshold(
+        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
+    )
+    combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
 
-    # -------------------------
-    # Adaptive Threshold optional
-    # -------------------------
-    if use_adaptive:
-        adaptive_thresh = cv2.adaptiveThreshold(
-            v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
-        )
-        combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
-    else:
-        combined_mask = mask_thresh
-
-    # -------------------------
     # Sättigungsfilter
-    # -------------------------
     sat_mask = (s > sat_min).astype(np.uint8) * 255
     collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
 
@@ -91,7 +77,7 @@ def analyze_image(file):
     labels = label(collagen_mask)
     filtered_mask = np.zeros_like(collagen_mask)
     for region in regionprops(labels):
-        if (not apply_cutoff or region.major_axis_length >= min_length) and region.area >= min_area:
+        if region.major_axis_length >= min_length and region.area >= min_area:
             filtered_mask[labels == region.label] = 255
     collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
