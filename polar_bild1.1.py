@@ -42,9 +42,14 @@ uploaded = st.sidebar.file_uploader(
 )
 
 # -------------------------
+# Checkbox einmalig für alle Bilder
+# -------------------------
+use_manual_thresh = st.sidebar.checkbox("Manuellen Threshold verwenden", value=False)
+
+# -------------------------
 # Analyse-Funktion
 # -------------------------
-def analyze_image(file):
+def analyze_image(file, use_manual_thresh=False):
     data = np.asarray(bytearray(file.read()), dtype=np.uint8)
     img = cv2.imdecode(data, cv2.IMREAD_COLOR)
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -56,19 +61,13 @@ def analyze_image(file):
     # Thresholding
     # -------------------------
     if mode == "Semiauto":
-        # Automatischer Startwert
-        otsu_val, _ = cv2.threshold(
-            v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
+        otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         thresh_val = np.clip(otsu_val + offset, 0, 255)
-        # Optional manueller Override
-        if st.sidebar.checkbox("Manuellen Threshold verwenden", value=False):
+        if use_manual_thresh:
             thresh_val = manual_thresh
         mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
     else:  # Auto+Offset
-        otsu_val, _ = cv2.threshold(
-            v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
+        otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         thresh_val = np.clip(otsu_val + offset, 0, 255)
         mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
 
@@ -101,70 +100,4 @@ def analyze_image(file):
     collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
 
-    # -------------------------
-    # Hue-Klassifikation
-    # -------------------------
-    red_mask = (((h >= 0) & (h <= red_max)) | ((h >= 170) & (h <= 179))) & cm
-    orange_mask = ((h >= orange_low) & (h <= orange_high)) & cm
-    green_mask = ((h >= green_low) & (h <= green_high)) & cm
-
-    # -------------------------
-    # Quantifizierung Rot/Grün Relation
-    # Orange = Remis
-    # -------------------------
-    red_px = np.sum(red_mask)
-    green_px = np.sum(green_mask)
-    total_classified = red_px + green_px
-    red_rel = 100 * red_px / (total_classified + 1e-6)
-    green_rel = 100 * green_px / (total_classified + 1e-6)
-
-    # Gesamtmaske (inklusive Mischfasern)
-    total_area = np.sum(cm)
-
-    # -------------------------
-    # Overlay
-    # -------------------------
-    overlay = img_rgb.copy()
-    overlay[red_mask] = [255, 0, 0]
-    overlay[orange_mask] = [255, 165, 0]
-    overlay[green_mask] = [0, 255, 0]
-
-    return {
-        "Image": file.name,
-        "Total Collagen Area (px)": total_area,
-        "Collagen I (red %)": red_rel,
-        "Collagen III (green %)": green_rel,
-        "overlay": overlay,
-        "mask": collagen_mask
-    }
-
-# -------------------------
-# Main
-# -------------------------
-results = []
-
-if uploaded:
-    for f in uploaded:
-        f.seek(0)
-        results.append(analyze_image(f))
-
-    df = pd.DataFrame(results).drop(columns=["overlay", "mask"])
-    st.subheader("📄 Ergebnisse (Rot/Grün Relation)")
-    st.dataframe(df)
-
-    st.download_button(
-        "📥 CSV herunterladen",
-        df.to_csv(index=False).encode("utf-8"),
-        "psr_collagen_results.csv"
-    )
-
-    st.subheader("🔍 Qualitätskontrolle")
-    for r in results:
-        st.markdown(f"### {r['Image']}")
-        st.image(r["mask"], caption="Gesamt-Kollagen-Maske inkl. feiner Fasern")
-        st.image(
-            r["overlay"],
-            caption="Overlay: Rot (I) · Orange (I+III, Remis) · Grün (III)"
-        )
-else:
-    st.info("Bitte PSR-Bilder hochladen.")
+    # -----------
