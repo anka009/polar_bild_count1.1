@@ -10,8 +10,13 @@ st.title("📊 PSR Polarized Collagen Quantifier (Feine Fasern + Längenfilter)"
 # -------------------------
 # Sidebar
 # -------------------------
-st.sidebar.header("Threshold-Modus")
-mode = st.sidebar.radio("Modus", ["Auto+Offset", "Manuell"])
+st.sidebar.header("Analyse-Modus")
+mode = st.sidebar.radio(
+    "Modus",
+    ["Semiauto", "Auto+Offset"],
+    index=0  # Semiauto als Default
+)
+
 offset = st.sidebar.slider("Otsu Offset", -40, 40, -10)
 manual_thresh = st.sidebar.slider("Manueller Threshold (V)", 0, 255, 110)
 
@@ -29,8 +34,9 @@ st.sidebar.header("Objektfilter")
 min_length = st.sidebar.slider("Minimale Faserlänge (px)", 1, 100, 10)
 min_area   = st.sidebar.slider("Minimale Fläche (px²)", 1, 20, 5)
 
+st.sidebar.header("PSR Bilder hochladen")
 uploaded = st.sidebar.file_uploader(
-    "PSR Bilder hochladen",
+    "Dateien auswählen",
     type=["tif", "tiff", "png", "jpg"],
     accept_multiple_files=True
 )
@@ -49,18 +55,31 @@ def analyze_image(file):
     # -------------------------
     # Thresholding
     # -------------------------
-    if mode == "Manuell":
-        mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
-    else:
-        otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if mode == "Semiauto":
+        # Automatischer Startwert
+        otsu_val, _ = cv2.threshold(
+            v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
+        thresh_val = np.clip(otsu_val + offset, 0, 255)
+        # Optional manueller Override
+        if st.sidebar.checkbox("Manuellen Threshold verwenden", value=False):
+            thresh_val = manual_thresh
+        mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
+    else:  # Auto+Offset
+        otsu_val, _ = cv2.threshold(
+            v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+        )
         thresh_val = np.clip(otsu_val + offset, 0, 255)
         mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
 
     # Adaptive Threshold für feine Fasern
-    adaptive_thresh = cv2.adaptiveThreshold(
-        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
-    )
-    combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
+    if st.sidebar.checkbox("Adaptive Threshold aktivieren", value=True):
+        adaptive_thresh = cv2.adaptiveThreshold(
+            v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
+        )
+        combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
+    else:
+        combined_mask = mask_thresh
 
     # Sättigungsfilter
     sat_mask = (s > sat_min).astype(np.uint8) * 255
@@ -91,7 +110,7 @@ def analyze_image(file):
 
     # -------------------------
     # Quantifizierung Rot/Grün Relation
-    # Orange wird als Remis betrachtet
+    # Orange = Remis
     # -------------------------
     red_px = np.sum(red_mask)
     green_px = np.sum(green_mask)
