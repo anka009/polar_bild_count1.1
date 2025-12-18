@@ -26,6 +26,7 @@ green_low = st.sidebar.slider("Grün low", 30, 60, 40)
 green_high = st.sidebar.slider("Grün high", 60, 120, 90)
 
 st.sidebar.header("Objektfilter")
+apply_cutoff = st.sidebar.checkbox("Längen-Cutoff aktivieren", value=True)
 min_length = st.sidebar.slider("Minimale Faserlänge (px)", 1, 100, 10)
 min_area   = st.sidebar.slider("Minimale Fläche (px²)", 1, 20, 5)
 
@@ -77,7 +78,7 @@ def analyze_image(file):
     labels = label(collagen_mask)
     filtered_mask = np.zeros_like(collagen_mask)
     for region in regionprops(labels):
-        if region.major_axis_length >= min_length and region.area >= min_area:
+        if (not apply_cutoff or region.major_axis_length >= min_length) and region.area >= min_area:
             filtered_mask[labels == region.label] = 255
     collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
