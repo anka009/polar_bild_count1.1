@@ -50,6 +50,7 @@ def analyze_image(file):
     # Thresholding
     # -------------------------
     bright_fg = st.sidebar.checkbox("Kollagen heller als Hintergrund (V)", value=True)
+    use_adaptive = st.sidebar.checkbox("Adaptive Threshold kombinieren", value=True)
 
     if mode == "Manuell":
         mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
@@ -61,14 +62,21 @@ def analyze_image(file):
             mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
         else:
             mask_thresh = (v_uint8 < thresh_val).astype(np.uint8) * 255
-    
-    # Adaptive Threshold für feine Fasern
-    adaptive_thresh = cv2.adaptiveThreshold(
-        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
-    )
-    combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
 
+    # -------------------------
+    # Adaptive Threshold optional
+    # -------------------------
+    if use_adaptive:
+        adaptive_thresh = cv2.adaptiveThreshold(
+            v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
+        )
+        combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
+    else:
+        combined_mask = mask_thresh
+
+    # -------------------------
     # Sättigungsfilter
+    # -------------------------
     sat_mask = (s > sat_min).astype(np.uint8) * 255
     collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
 
