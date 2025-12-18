@@ -50,6 +50,7 @@ def analyze_image(file):
     # -------------------------
     # Thresholding
     # -------------------------
+    bright_fg = st.sidebar.checkbox("Kollagen heller als Hintergrund (V)", value=True)
     if mode == "Manuell":
         mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
     else:
