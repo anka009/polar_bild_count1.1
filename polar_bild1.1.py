@@ -112,6 +112,7 @@ def analyze_image(file):
 
     return {
         "Image": file.name,
+        "original": img,
         "Total Collagen Area (px)": total_area,
         "Collagen I (red %)": red_rel,
         "Collagen III (green %)": green_rel,
