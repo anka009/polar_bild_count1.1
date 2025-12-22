@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from skimage.measure import label, regionprops
+from PIL import Image
 
 st.set_page_config(page_title="PSR Collagen Quantification – Paper-ready", layout="wide")
 st.title("📊 PSR Polarized Collagen Quantifier (Feine Fasern + Längenfilter)")
