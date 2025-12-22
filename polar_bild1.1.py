@@ -126,7 +126,8 @@ def analyze_image(file):
     total_area = np.sum(cm)
     
     # Klassifizierte Fläche (nur Rot/Orange/Grün) 
-    classified_area = red_px + orange_px + green_px 
+    classified_area = red_px + orange_px + green_px
+    
     # Nicht klassifizierbare Kollagenpixel 
     unclassified_area = total_area - classified_area
     
@@ -149,7 +150,7 @@ def analyze_image(file):
         "Eff_Red": eff_red,
         "Eff_Green": eff_green,
         "Red/Green Ratio": red_green_ratio,
-        "Total Collagen Area (px)": total_area
+        "Total Collagen Area (px)": total_area,
         "Classified Collagen (px)": classified_area,
         "Unclassified Collagen (px)": unclassified_area 
     }
