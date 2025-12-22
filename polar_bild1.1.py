@@ -130,7 +130,15 @@ if uploaded:
         f.seek(0)
         results.append(analyze_image(f))
 
-    df = pd.DataFrame(results).drop(columns=["overlay", "mask"])
+    # DataFrame erstellen
+    df = pd.DataFrame(results)
+
+    # Alle Bild-Spalten entfernen (PIL Images → ArrowError)
+    image_columns = ["overlay", "mask", "original"]
+    for col in image_columns:
+        if col in df.columns:
+            df = df.drop(columns=[col])
+
     st.subheader("📄 Ergebnisse (Rot/Grün Relation)")
     st.dataframe(df)
 
@@ -144,7 +152,7 @@ if uploaded:
     for r in results:
         st.markdown(f"### {r['Image']}")
 
-        # 👉 Drei Bilder nebeneinander: Original – Maske – Overlay
+        # Drei Bilder nebeneinander
         col1, col2, col3 = st.columns(3)
 
         with col1:
