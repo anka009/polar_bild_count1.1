@@ -45,7 +45,7 @@ def analyze_image(file):
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     v_uint8 = v.astype(np.uint8)
-
+    original_pil = Image.fromarray(img_rgb)
     # -------------------------
     # Thresholding
     # -------------------------
