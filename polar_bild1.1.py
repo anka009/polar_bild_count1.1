@@ -143,23 +143,29 @@ if uploaded:
     for r in results:
         st.markdown(f"### {r['Image']}")
 
-        # 👉 Bilder nebeneinander
-        col1, col2 = st.columns(2)
+        # 👉 Drei Bilder nebeneinander: Original – Maske – Overlay
+        col1, col2, col3 = st.columns(3)
 
         with col1:
             st.image(
-                r["mask"],
-                caption="Gesamt-Kollagen-Maske inkl. feiner Fasern",
+                r["original"],
+                caption="Originalbild",
                 use_column_width=True
             )
 
         with col2:
             st.image(
+                r["mask"],
+                caption="Kollagen-Maske",
+                use_column_width=True
+            )
+
+        with col3:
+            st.image(
                 r["overlay"],
-                caption="Overlay: Rot (I) · Orange (I+III, Remis) · Grün (III)",
+                caption="Overlay: Rot (I) · Orange (I+III) · Grün (III)",
                 use_column_width=True
             )
 
 else:
     st.info("Bitte PSR-Bilder hochladen.")
-
