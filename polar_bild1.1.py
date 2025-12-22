@@ -142,10 +142,24 @@ if uploaded:
     st.subheader("🔍 Qualitätskontrolle")
     for r in results:
         st.markdown(f"### {r['Image']}")
-        st.image(r["mask"], caption="Gesamt-Kollagen-Maske inkl. feiner Fasern")
-        st.image(
-            r["overlay"],
-            caption="Overlay: Rot (I) · Orange (I+III, Remis) · Grün (III)"
-        )
+
+        # 👉 Bilder nebeneinander
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.image(
+                r["mask"],
+                caption="Gesamt-Kollagen-Maske inkl. feiner Fasern",
+                use_column_width=True
+            )
+
+        with col2:
+            st.image(
+                r["overlay"],
+                caption="Overlay: Rot (I) · Orange (I+III, Remis) · Grün (III)",
+                use_column_width=True
+            )
+
 else:
     st.info("Bitte PSR-Bilder hochladen.")
+
