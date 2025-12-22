@@ -148,33 +148,38 @@ if uploaded:
         "psr_collagen_results.csv"
     )
 
+    # 👉 NEUER BLOCK: Anzeigeoptionen + dynamische Bildanzeige
+    st.subheader("🔧 Anzeigeoptionen")
+
+    show_overlay = st.checkbox("Overlay anzeigen", value=True)
+    show_mask = st.checkbox("Maske anzeigen", value=True)
+    show_original = st.checkbox("Originalbild anzeigen", value=True)
+
     st.subheader("🔍 Qualitätskontrolle")
+
     for r in results:
         st.markdown(f"### {r['Image']}")
 
-        # Drei Bilder nebeneinander
-        col1, col2, col3 = st.columns(3)
+        # Reihenfolge festlegen: overlay → maske → original
+        ordered_keys = []
+        if show_overlay:
+            ordered_keys.append("overlay")
+        if show_mask:
+            ordered_keys.append("mask")
+        if show_original:
+            ordered_keys.append("original")
 
-        with col1:
-            st.image(
-                r["original"],
-                caption="Originalbild",
-                use_column_width=True
-            )
+        # Dynamisch Spalten erzeugen
+        cols = st.columns(len(ordered_keys))
 
-        with col2:
-            st.image(
-                r["mask"],
-                caption="Kollagen-Maske",
-                use_column_width=True
-            )
-
-        with col3:
-            st.image(
-                r["overlay"],
-                caption="Overlay: Rot (I) · Orange (I+III) · Grün (III)",
-                use_column_width=True
-            )
+        # Bilder in Spalten platzieren
+        for col, key in zip(cols, ordered_keys):
+            with col:
+                st.image(
+                    r[key],
+                    caption=key.capitalize(),
+                    use_column_width=True
+                )
 
 else:
     st.info("Bitte PSR-Bilder hochladen.")
