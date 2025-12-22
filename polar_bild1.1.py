@@ -40,26 +40,36 @@ uploaded = st.sidebar.file_uploader(
 # Analyse-Funktion
 # -------------------------
 def analyze_image(file):
+    # Bild einlesen
     data = np.asarray(bytearray(file.read()), dtype=np.uint8)
     img = cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+    # BGR → RGB
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    # HSV
     hsv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2HSV)
     h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
     v_uint8 = v.astype(np.uint8)
+
+    # Originalbild
     original_pil = Image.fromarray(img_rgb)
+
     # -------------------------
     # Thresholding
     # -------------------------
     if mode == "Manuell":
         mask_thresh = (v_uint8 > manual_thresh).astype(np.uint8) * 255
     else:
-        otsu_val, _ = cv2.threshold(v_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        otsu_val, _ = cv2.threshold(v_uint8, 0, 255,
+                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         thresh_val = np.clip(otsu_val + offset, 0, 255)
         mask_thresh = (v_uint8 > thresh_val).astype(np.uint8) * 255
 
-    # Adaptive Threshold für feine Fasern
+    # Adaptive Threshold
     adaptive_thresh = cv2.adaptiveThreshold(
-        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 15, -5
+        v_uint8, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
+        cv2.THRESH_BINARY, 15, -5
     )
     combined_mask = cv2.bitwise_or(mask_thresh, adaptive_thresh)
 
@@ -68,7 +78,7 @@ def analyze_image(file):
     collagen_mask = cv2.bitwise_and(combined_mask, sat_mask)
 
     # Morphologische Reinigung
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_OPEN, kernel)
     collagen_mask = cv2.morphologyEx(collagen_mask, cv2.MORPH_CLOSE, kernel)
 
@@ -77,30 +87,42 @@ def analyze_image(file):
     # -------------------------
     labels = label(collagen_mask)
     filtered_mask = np.zeros_like(collagen_mask)
+
     for region in regionprops(labels):
         if region.major_axis_length >= min_length and region.area >= min_area:
             filtered_mask[labels == region.label] = 255
+
     collagen_mask = filtered_mask
     cm = collagen_mask.astype(bool)
 
     # -------------------------
     # Hue-Klassifikation
     # -------------------------
-    red_mask = (((h >= 0) & (h <= red_max)) | ((h >= 170) & (h <= 179))) & cm
+    red_mask = (
+        (((h >= 0) & (h <= red_max)) |
+         ((h >= 170) & (h <= 179))) & cm
+    )
     orange_mask = ((h >= orange_low) & (h <= orange_high)) & cm
     green_mask = ((h >= green_low) & (h <= green_high)) & cm
 
     # -------------------------
-    # Quantifizierung Rot/Grün Relation
-    # Orange wird als Remis betrachtet
+    # Quantifizierung (gewichtete Relation)
     # -------------------------
     red_px = np.sum(red_mask)
+    orange_px = np.sum(orange_mask)
     green_px = np.sum(green_mask)
-    total_classified = red_px + green_px
-    red_rel = 100 * red_px / (total_classified + 1e-6)
-    green_rel = 100 * green_px / (total_classified + 1e-6)
 
-    # Gesamtmaske (inklusive Mischfasern)
+    # Gewichtete Flächen
+    eff_red = red_px + 0.5 * orange_px
+    eff_green = green_px + 0.5 * orange_px
+
+    # Verhältnis
+    if eff_green > 0:
+        red_green_ratio = eff_red / eff_green
+    else:
+        red_green_ratio = None
+
+    # Gesamtfläche
     total_area = np.sum(cm)
 
     # -------------------------
@@ -114,11 +136,15 @@ def analyze_image(file):
     return {
         "Image": file.name,
         "original": original_pil,
-        "Total Collagen Area (px)": total_area,
-        "Collagen I (red %)": red_rel,
-        "Collagen III (green %)": green_rel,
+        "mask": collagen_mask,
         "overlay": overlay,
-        "mask": collagen_mask
+        "Red (px)": red_px,
+        "Orange (px)": orange_px,
+        "Green (px)": green_px,
+        "Eff_Red": eff_red,
+        "Eff_Green": eff_green,
+        "Red/Green Ratio": red_green_ratio,
+        "Total Collagen Area (px)": total_area
     }
 
 # -------------------------
